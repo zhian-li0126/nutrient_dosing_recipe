@@ -1,2 +1,1 @@
-"""Private backend package for the nutrient solution calculator."""
-
+"""Server-side nutrient calculation service."""

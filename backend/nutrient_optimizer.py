@@ -1,276 +1,132 @@
-"""Private nutrient optimization and unit-conversion engine.
+"""Nonnegative nutrient additions using a weighted least-squares objective.
 
-This module is imported by the API server and is never mounted as a static asset.
-All arrays use the ion order [NO3, K, Ca, Mg, SO4, H2PO4].
+Let F contain ion mass fractions and z be fertilizer additions in g/L. The
+optimizer minimizes ||(1000 F z - (target - current)) / max(target, 1)||²,
+subject to z >= 0. Fertilizer masses are subsequently z * reservoir_volume.
+Working in g/L keeps the optimization independent of reservoir size.
+
+The signed residual deliberately preserves an existing excess: clamping a
+negative deficit to zero would under-penalize fertilizers adding more of an ion
+that is already above its target. The salt columns are not independent, so an
+optimal mixture need not be unique; the predicted final ion vector is the
+quantity to compare when validating equivalent formulations.
 """
 
-from __future__ import annotations
-
-from typing import Any, Sequence
+import math
 
 import numpy as np
 from scipy.optimize import nnls
 
-from backend.fertilizer_config import COMPOUND_MOLAR_MASS, FERTILIZER_NAMES
+from .fertilizer_config import ASSUMPTIONS, FERTILIZERS, IONS, mass_fraction_matrix
+from .models import CalculationRequest, CalculationResponse
 
 
-NUTRIENT_NAMES: tuple[str, ...] = ("NO3", "K", "Ca", "Mg", "SO4", "H2PO4")
-NUTRIENT_DISPLAY_NAMES: tuple[str, ...] = (
-    "NO3−",
-    "K+",
-    "Ca2+",
-    "Mg2+",
-    "SO4²−",
-    "H2PO4−",
-)
-
-K = 39.0
-CA = 40.0
-MG = 24.0
-NO3 = 62.0
-SO4 = 96.0
-H2PO4 = 97.0
-
-ELEMENT_MOLAR_MASS = np.array([NO3, K, CA, MG, SO4, H2PO4], dtype=float)
-
-CaNO3 = np.array([2, 0, 1, 0, 0, 0], dtype=float)
-KNO3 = np.array([1, 1, 0, 0, 0, 0], dtype=float)
-K2SO4 = np.array([0, 2, 0, 0, 1, 0], dtype=float)
-MgNO3 = np.array([2, 0, 0, 1, 0, 0], dtype=float)
-MgSO4 = np.array([0, 0, 0, 1, 1, 0], dtype=float)
-KH2PO4 = np.array([0, 1, 0, 0, 0, 1], dtype=float)
-
-ALL_COMPOUNDS = [CaNO3, KNO3, K2SO4, MgNO3, MgSO4, KH2PO4]
-
-CANDIDATE_INDICES = [
-    [0, 2, 3, 5],
-    [0, 1, 2, 3, 5],
-    [0, 1, 4, 5],
-    [0, 1, 2, 4, 5],
-    [0, 2, 3, 4, 5],
-    [0, 1, 3, 4, 5],
-    [0, 1, 2, 3, 4, 5],
-]
-
-WEIGHTS = np.array([4, 4, 2, 2, 2, 2], dtype=float)
-MAXIMUM_REWARD = int(np.sum(WEIGHTS))
-ZERO_TOLERANCE = 1e-12
+def _stable_rmse(values: np.ndarray) -> float:
+    """RMS without first squaring potentially large floating-point values."""
+    largest = float(np.max(np.abs(values)))
+    if largest == 0:
+        return 0.0
+    return largest * math.sqrt(float(np.mean(np.square(values / largest))))
 
 
-def _as_six_value_array(values: Sequence[float], field_name: str) -> np.ndarray:
-    """Defensively validate direct calls made outside the API layer."""
-    array = np.asarray(values, dtype=float)
-    if array.shape != (6,):
-        raise ValueError(f"{field_name} must contain exactly six values")
-    if not np.all(np.isfinite(array)):
-        raise ValueError(f"{field_name} must contain only finite values")
-    if np.any(array < 0):
-        raise ValueError(f"{field_name} cannot contain negative values")
-    return array
+def calculate_nutrients(request: CalculationRequest) -> CalculationResponse:
+    """Calculate a nonnegative blend for a validated request.
 
-
-def _select_best_candidate(delta_mmol: np.ndarray) -> dict[str, Any]:
-    """Select the highest-reward formulation, breaking ties by weighted error."""
-    best_indices: list[int] | None = None
-    best_matrix: np.ndarray | None = None
-    best_solution: np.ndarray | None = None
-    best_prediction: np.ndarray | None = None
-    best_reward = -1.0
-    best_error = float("inf")
-
-    for indices in CANDIDATE_INDICES:
-        matrix = np.column_stack([ALL_COMPOUNDS[index] for index in indices])
-        solution, _residual = nnls(matrix, delta_mmol)
-        prediction = matrix @ solution
-
-        denominator = np.maximum(delta_mmol, 1e-9)
-        relative_error = np.abs(prediction - delta_mmol) / denominator
-        reward = float(np.sum(WEIGHTS[relative_error <= 0.15]))
-        weighted_error = float(np.sum(WEIGHTS * relative_error**2))
-
-        if reward > best_reward or (
-            reward == best_reward and weighted_error < best_error
-        ):
-            best_indices = list(indices)
-            best_matrix = matrix
-            best_solution = solution
-            best_prediction = prediction
-            best_reward = reward
-            best_error = weighted_error
-
-    if (
-        best_indices is None
-        or best_matrix is None
-        or best_solution is None
-        or best_prediction is None
-    ):
-        raise RuntimeError("No fertilizer candidate could be selected")
-
-    return {
-        "indices": best_indices,
-        "matrix": best_matrix,
-        "solution": best_solution,
-        "prediction": best_prediction,
-        "reward": best_reward,
-        "weighted_error": best_error,
-    }
-
-
-def _build_warnings(
-    current: np.ndarray,
-    target: np.ndarray,
-    final_concentration: np.ndarray,
-    stock_concentrations: Sequence[float | None],
-) -> list[dict[str, str]]:
-    warnings: list[dict[str, str]] = []
-
-    for index, nutrient_name in enumerate(NUTRIENT_NAMES):
-        if current[index] > target[index]:
-            warnings.append(
-                {
-                    "type": "above_target",
-                    "nutrient": nutrient_name,
-                    "message": (
-                        f"{nutrient_name} is already above the target concentration. "
-                        "No direct addition was requested for this ion, but coupled "
-                        "fertilizers may still increase its concentration."
-                    ),
-                }
-            )
-
-        noticeable_overshoot = max(target[index] * 0.05, 1.0)
-        if final_concentration[index] > target[index] + noticeable_overshoot:
-            warnings.append(
-                {
-                    "type": "coupled_overshoot",
-                    "nutrient": nutrient_name,
-                    "message": (
-                        f"Predicted {nutrient_name} concentration is above the "
-                        "requested target because fertilizer salts can supply "
-                        "multiple ions."
-                    ),
-                }
-            )
-
-    if any(value is None for value in stock_concentrations):
-        warnings.append(
-            {
-                "type": "missing_stock",
-                "nutrient": "",
-                "message": (
-                    "Stock solution concentration was not provided for one or more "
-                    "fertilizers. Dry fertilizer mass is shown instead."
-                ),
-            }
-        )
-
-    return warnings
-
-
-def calculate_nutrient_addition(
-    target: np.ndarray | Sequence[float],
-    current: np.ndarray | Sequence[float],
-    reservoir_volume_l: float,
-    stock_concentrations: list[float | None],
-) -> dict[str, Any]:
-    """Calculate a nonnegative fertilizer recommendation.
-
-    Concentrations are mg/L of each listed ion. Optimizer quantities are mmol/L;
-    fertilizer mass conversions use the configured anhydrous g/mol values.
+    Raises ValueError if a finite but extreme input cannot be represented by
+    the numerical solver or the returned units. No partially valid result is
+    returned in that situation.
     """
-    target_array = _as_six_value_array(target, "target")
-    current_array = _as_six_value_array(current, "current")
+    target = np.asarray(request.target, dtype=float)
+    current = np.asarray(request.current, dtype=float)
+    scale = np.maximum(target, 1.0)
+    matrix = mass_fraction_matrix() * 1000.0
 
-    if not np.isfinite(reservoir_volume_l) or reservoir_volume_l <= 0:
-        raise ValueError("reservoir_volume_l must be a positive finite number")
-    if len(stock_concentrations) != 6:
-        raise ValueError("stock_concentrations must contain exactly six values")
-    for value in stock_concentrations:
-        if value is not None and (not np.isfinite(value) or value <= 0):
-            raise ValueError(
-                "stock concentrations must be positive finite values when provided"
-            )
+    try:
+        with np.errstate(over="raise", invalid="raise", divide="raise"):
+            delta = target - current
+            if np.all(delta <= 0):
+                dose_g_per_l = np.zeros(6, dtype=float)
+            else:
+                dose_g_per_l, _ = nnls(matrix / scale[:, None], delta / scale, maxiter=1000)
+            if not np.all(np.isfinite(dose_g_per_l)) or np.any(dose_g_per_l < 0):
+                raise ValueError("The optimizer returned an invalid dose.")
+            # Do not round the recommendation before calculating mass balance.
+            added = matrix @ dose_g_per_l
+            final = current + added
+            error = final - target
+            grams = dose_g_per_l * request.reservoir_volume
+            stock_ml = [
+                None if strength is None else float(grams[index] / strength * 1000.0)
+                for index, strength in enumerate(request.stock_concentrations)
+            ]
+            percent_error = [
+                None if target[index] == 0 else float(error[index] / target[index] * 100.0)
+                for index in range(6)
+            ]
+            weighted_rmse = _stable_rmse(error / scale)
+            total_grams = float(np.sum(grams))
+    except (FloatingPointError, OverflowError, RuntimeError, ValueError) as exc:
+        raise ValueError(
+            "These values are outside the supported numerical range. "
+            "Use realistic concentrations, reservoir volume, and stock strengths."
+        ) from exc
 
-    delta_ppm = np.maximum(target_array - current_array, 0.0)
-    delta_mmol = delta_ppm / ELEMENT_MOLAR_MASS
+    finite_outputs = [*added, *final, *error, *grams, weighted_rmse, total_grams]
+    finite_outputs.extend(value for value in stock_ml if value is not None)
+    finite_outputs.extend(value for value in percent_error if value is not None)
+    if not all(math.isfinite(float(value)) for value in finite_outputs):
+        raise ValueError("These inputs produce values outside the supported numerical range.")
 
-    selected = _select_best_candidate(delta_mmol)
-    best_indices: list[int] = selected["indices"]
-    best_solution: np.ndarray = selected["solution"]
-    best_prediction: np.ndarray = selected["prediction"]
-
-    mols_to_add = np.zeros(6, dtype=float)
-    for local_index, fertilizer_index in enumerate(best_indices):
-        mols_to_add[fertilizer_index] = best_solution[local_index]
-
-    # Remove floating-point noise without altering scored optimizer values.
-    mols_to_add[np.abs(mols_to_add) < ZERO_TOLERANCE] = 0.0
-    if np.any(mols_to_add < 0):
-        raise RuntimeError("The optimizer returned a negative fertilizer amount")
-
-    fertilizer_mg_per_l = mols_to_add * COMPOUND_MOLAR_MASS
-    mass_g = fertilizer_mg_per_l * float(reservoir_volume_l) / 1000.0
-
-    predicted_delta_mg_l = best_prediction * ELEMENT_MOLAR_MASS
-    final_concentration = current_array + predicted_delta_mg_l
-    denominator = np.maximum(delta_mmol, 1e-9)
-    relative_error = np.abs(best_prediction - delta_mmol) / denominator
-
-    nutrient_results = []
-    for index, name in enumerate(NUTRIENT_NAMES):
-        final_fit_tolerance_mg_l = max(target_array[index] * 0.05, 1.0)
-        nutrient_results.append(
-            {
-                "name": name,
-                "display_name": NUTRIENT_DISPLAY_NAMES[index],
-                "current_mg_L": float(current_array[index]),
-                "target_mg_L": float(target_array[index]),
-                "requested_increase_mg_L": float(delta_ppm[index]),
-                "predicted_increase_mg_L": float(predicted_delta_mg_l[index]),
-                "difference_mg_L": float(predicted_delta_mg_l[index] - delta_ppm[index]),
-                "final_mg_L": float(final_concentration[index]),
-                "relative_error_percent": float(relative_error[index] * 100.0),
-                "fit_status": (
-                    "close"
-                    if abs(final_concentration[index] - target_array[index])
-                    <= final_fit_tolerance_mg_l
-                    else "outside"
-                ),
-            }
+    warnings = []
+    tolerance = np.maximum(1e-6, 0.001 * scale)
+    already_high = [ion.label for index, ion in enumerate(IONS)
+                    if current[index] > target[index] + tolerance[index]]
+    if already_high:
+        warnings.append(
+            "Already above target: " + ", ".join(already_high)
+            + ". Additions cannot remove this excess."
+        )
+    if np.any(np.abs(error) > tolerance):
+        warnings.append(
+            "The targets cannot all be matched with the selected six salts and additions-only "
+            "model. This result is a least-squares compromise; review the final concentrations."
+        )
+    overshoot = [ion.label for index, ion in enumerate(IONS)
+                 if error[index] > tolerance[index] and added[index] > tolerance[index]]
+    if overshoot:
+        warnings.append(
+            "Coupled fertilizer ions increase concentrations above target for: "
+            + ", ".join(overshoot) + "."
+        )
+    if total_grams == 0:
+        warnings.append("The best additions-only solution adds no fertilizer.")
+    if any(strength is None and grams[index] > 0
+           for index, strength in enumerate(request.stock_concentrations)):
+        warnings.append("Some stock strengths are blank; those doses are reported in grams only.")
+    known_stock_ml = sum(value for value in stock_ml if value is not None)
+    if known_stock_ml > request.reservoir_volume * 1000.0 * 0.01:
+        warnings.append(
+            "The entered stock strengths require stock volume greater than one percent of the "
+            "reservoir volume. The fixed-volume approximation may be unsuitable."
         )
 
-    fertilizer_results = []
-    for index, name in enumerate(FERTILIZER_NAMES):
-        stock_concentration = stock_concentrations[index]
-        stock_volume_ml = (
-            None
-            if stock_concentration is None
-            else float(mass_g[index] / stock_concentration * 1000.0)
-        )
-        fertilizer_results.append(
-            {
-                "name": name,
-                "mmol_L": float(mols_to_add[index]),
-                "mg_L": float(fertilizer_mg_per_l[index]),
-                "mass_g": float(mass_g[index]),
-                "stock_concentration_g_L": stock_concentration,
-                "stock_volume_ml": stock_volume_ml,
-                "recommended": bool(mols_to_add[index] > ZERO_TOLERANCE),
-            }
-        )
-
-    return {
-        "best_combination": [FERTILIZER_NAMES[index] for index in best_indices],
-        "reward": int(selected["reward"]),
-        "maximum_reward": MAXIMUM_REWARD,
-        "weighted_error": float(selected["weighted_error"]),
-        "reservoir_volume_L": float(reservoir_volume_l),
-        "nutrients": nutrient_results,
-        "fertilizers": fertilizer_results,
-        "warnings": _build_warnings(
-            current_array,
-            target_array,
-            final_concentration,
-            stock_concentrations,
-        ),
-    }
+    return CalculationResponse(
+        ions=[
+            {"id": ion.id, "label": ion.label, "formula": ion.formula,
+             "target": float(target[index]), "current": float(current[index]),
+             "added": float(added[index]), "final": float(final[index]),
+             "error": float(error[index]), "relative_error_percent": percent_error[index]}
+            for index, ion in enumerate(IONS)
+        ],
+        fertilizers=[
+            {"id": fertilizer.id, "name": fertilizer.name, "formula": fertilizer.formula,
+             "grams": float(grams[index]), "stock_concentration": request.stock_concentrations[index],
+             "stock_volume_ml": stock_ml[index]}
+            for index, fertilizer in enumerate(FERTILIZERS)
+        ],
+        metrics={"rmse_mg_l": _stable_rmse(error),
+                 "max_abs_error_mg_l": float(np.max(np.abs(error))),
+                 "total_fertilizer_g": total_grams, "weighted_rmse": weighted_rmse},
+        warnings=warnings,
+        assumptions=list(ASSUMPTIONS),
+    )

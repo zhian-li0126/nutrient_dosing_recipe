@@ -1,0 +1,14 @@
+# Optional Render Blueprint. The manual setup in DEPLOY_GITHUB.md also works.
+services:
+  - type: web
+    name: nutrient-calculator
+    runtime: python
+    plan: free
+    buildCommand: python -m pip install -r requirements.txt
+    startCommand: python -m uvicorn backend.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/health
+    envVars:
+      - key: CORS_ORIGINS
+        sync: false
+      - key: ENABLE_API_DOCS
+        value: "false"

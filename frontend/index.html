@@ -1,229 +1,133 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta
-      name="description"
-      content="Ion-balanced fertilizer recommendations for hydroponic nutrient solutions."
-    >
-    <title>Nutrient Solution Calculator</title>
-    <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
-    <link rel="stylesheet" href="/static/style.css">
-    <script src="/static/app.js" defer></script>
-  </head>
-  <body>
-    <header class="site-header">
-      <div class="header-inner">
-        <a class="brand" href="/" aria-label="Nutrient Solution Calculator home">
-          <span class="brand-mark" aria-hidden="true">
-            <span></span><span></span><span></span>
-          </span>
-          <span>Ionform</span>
-        </a>
-        <span class="tool-badge">Research tool</span>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Calculate fertilizer additions for six nutrient ions in a hydroponic reservoir.">
+  <meta name="theme-color" content="#2C3B4D">
+  <title>Nutrient Solution Calculator</title>
+  <link rel="stylesheet" href="./style.css">
+  <script src="./config.js" defer></script>
+  <script src="./app.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#calculator">Skip to calculator</a>
+  <header class="site-header">
+    <div class="shell header-inner">
+      <a class="brand" href="./" aria-label="Nutrient Solution Calculator home">
+        <span class="brand-mark" aria-hidden="true">N<span>+</span></span>
+        <span>Nutrient solution<span class="brand-subtitle">CALCULATOR</span></span>
+      </a>
+      <div class="header-tools">
+        <a class="method-link" href="#method">How it works</a>
+        <span id="connection-status" class="connection" data-state="checking" role="status">
+          <span class="status-dot" aria-hidden="true"></span>
+          <span id="connection-label">Checking connection</span>
+        </span>
       </div>
-    </header>
+    </div>
+  </header>
 
-    <main class="page-shell">
-      <section class="hero" aria-labelledby="page-title">
-        <div class="eyebrow"><span></span> Hydroponic formulation</div>
-        <h1 id="page-title">Nutrient Solution Calculator</h1>
-        <p>Ion-balanced fertilizer recommendation for hydroponic nutrient solutions</p>
-      </section>
+  <main class="shell" id="calculator">
+    <section class="intro" aria-labelledby="page-title">
+      <div>
+        <p class="eyebrow">HYDROPONIC NUTRIENT MANAGEMENT</p>
+        <h1 id="page-title">Plan your next addition.</h1>
+        <p class="intro-copy">Compare your measured solution with six ion targets, then calculate a fertilizer addition for your reservoir.</p>
+      </div>
+      <div class="intro-facts" aria-label="Calculator scope">
+        <span><strong>6</strong> nutrient ions</span>
+        <span><strong>6</strong> fertilizer salts</span>
+        <span><strong>mg/L</strong> ion basis</span>
+      </div>
+    </section>
 
-      <form id="calculatorForm" novalidate>
-        <section class="input-card" aria-labelledby="input-heading">
-          <div class="section-heading">
-            <div>
-              <span class="section-kicker">Input</span>
-              <h2 id="input-heading">Define your nutrient goal</h2>
-              <p>Enter measured and desired concentrations for the six ionic species.</p>
-            </div>
-            <span class="units-chip">All values in mg/L</span>
+    <noscript><p class="message error">JavaScript is required to enter values and request a calculation.</p></noscript>
+    <div class="calculator-layout">
+      <form id="calculator-form" class="input-column">
+        <section class="card" aria-labelledby="solution-title">
+          <div class="card-heading">
+            <div class="section-title"><span class="step">01</span><h2 id="solution-title">Solution inputs</h2></div>
+            <span id="input-mode" class="subtle-badge">Example inputs</span>
           </div>
-
-          <div class="table-scroll input-table-wrap">
-            <table class="data-table input-table">
-              <thead>
-                <tr>
-                  <th scope="col">Ion</th>
-                  <th scope="col">Current concentration</th>
-                  <th scope="col">Target concentration</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <th scope="row"><span class="ion-label">NO<sub>3</sub><sup>−</sup></span><span class="ion-name">Nitrate</span></th>
-                  <td><label class="sr-only" for="current-no3">Current nitrate concentration</label><div class="number-field"><input class="current-input" id="current-no3" type="number" min="0" max="1000000" step="any" placeholder="0" inputmode="decimal"><span>mg/L</span></div></td>
-                  <td><label class="sr-only" for="target-no3">Target nitrate concentration</label><div class="number-field"><input class="target-input" id="target-no3" type="number" min="0" max="1000000" step="any" value="434" required inputmode="decimal"><span>mg/L</span></div></td>
-                </tr>
-                <tr>
-                  <th scope="row"><span class="ion-label">K<sup>+</sup></span><span class="ion-name">Potassium</span></th>
-                  <td><label class="sr-only" for="current-k">Current potassium concentration</label><div class="number-field"><input class="current-input" id="current-k" type="number" min="0" max="1000000" step="any" placeholder="0" inputmode="decimal"><span>mg/L</span></div></td>
-                  <td><label class="sr-only" for="target-k">Target potassium concentration</label><div class="number-field"><input class="target-input" id="target-k" type="number" min="0" max="1000000" step="any" value="117.3" required inputmode="decimal"><span>mg/L</span></div></td>
-                </tr>
-                <tr>
-                  <th scope="row"><span class="ion-label">Ca<sup>2+</sup></span><span class="ion-name">Calcium</span></th>
-                  <td><label class="sr-only" for="current-ca">Current calcium concentration</label><div class="number-field"><input class="current-input" id="current-ca" type="number" min="0" max="1000000" step="any" placeholder="0" inputmode="decimal"><span>mg/L</span></div></td>
-                  <td><label class="sr-only" for="target-ca">Target calcium concentration</label><div class="number-field"><input class="target-input" id="target-ca" type="number" min="0" max="1000000" step="any" value="80.2" required inputmode="decimal"><span>mg/L</span></div></td>
-                </tr>
-                <tr>
-                  <th scope="row"><span class="ion-label">Mg<sup>2+</sup></span><span class="ion-name">Magnesium</span></th>
-                  <td><label class="sr-only" for="current-mg">Current magnesium concentration</label><div class="number-field"><input class="current-input" id="current-mg" type="number" min="0" max="1000000" step="any" placeholder="0" inputmode="decimal"><span>mg/L</span></div></td>
-                  <td><label class="sr-only" for="target-mg">Target magnesium concentration</label><div class="number-field"><input class="target-input" id="target-mg" type="number" min="0" max="1000000" step="any" value="24.6" required inputmode="decimal"><span>mg/L</span></div></td>
-                </tr>
-                <tr>
-                  <th scope="row"><span class="ion-label">SO<sub>4</sub><sup>2−</sup></span><span class="ion-name">Sulfate</span></th>
-                  <td><label class="sr-only" for="current-so4">Current sulfate concentration</label><div class="number-field"><input class="current-input" id="current-so4" type="number" min="0" max="1000000" step="any" placeholder="0" inputmode="decimal"><span>mg/L</span></div></td>
-                  <td><label class="sr-only" for="target-so4">Target sulfate concentration</label><div class="number-field"><input class="target-input" id="target-so4" type="number" min="0" max="1000000" step="any" value="96" required inputmode="decimal"><span>mg/L</span></div></td>
-                </tr>
-                <tr>
-                  <th scope="row"><span class="ion-label">H<sub>2</sub>PO<sub>4</sub><sup>−</sup></span><span class="ion-name">Dihydrogen phosphate</span></th>
-                  <td><label class="sr-only" for="current-h2po4">Current phosphate concentration</label><div class="number-field"><input class="current-input" id="current-h2po4" type="number" min="0" max="1000000" step="any" placeholder="0" inputmode="decimal"><span>mg/L</span></div></td>
-                  <td><label class="sr-only" for="target-h2po4">Target phosphate concentration</label><div class="number-field"><input class="target-input" id="target-h2po4" type="number" min="0" max="1000000" step="any" value="50" required inputmode="decimal"><span>mg/L</span></div></td>
-                </tr>
-              </tbody>
+          <div class="reservoir-row">
+            <div><label class="field-label" for="reservoir-volume">Reservoir volume</label><p class="field-help" id="volume-help">Solution volume used for the calculation.</p></div>
+            <div class="input-with-unit volume-input"><input id="reservoir-volume" name="reservoir_volume" type="number" min="0" step="any" required inputmode="decimal" aria-describedby="volume-help"><span aria-hidden="true">L</span></div>
+          </div>
+          <div class="table-wrap">
+            <table class="input-table">
+              <caption class="sr-only">Target and measured ion concentrations, in milligrams per liter of each ionic species.</caption>
+              <thead><tr><th scope="col">Nutrient ion</th><th scope="col" id="target-heading">Target <span>mg/L</span></th><th scope="col" id="current-heading">Current <span>mg/L</span></th></tr></thead>
+              <tbody id="ion-inputs"></tbody>
             </table>
           </div>
-
-          <div class="input-footer-grid">
-            <div class="volume-field">
-              <label for="reservoirVolume">Reservoir volume</label>
-              <p>Used to calculate the total fertilizer mass.</p>
-              <div class="number-field volume-input">
-                <input id="reservoirVolume" type="number" min="0.000001" max="100000000" step="any" value="80" required inputmode="decimal">
-                <span>L</span>
-              </div>
-            </div>
-            <div class="info-note">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 10.6v5.2M12 7.5h.01"></path></svg>
-              <p>The calculator recommends additions only. It does not model nutrient removal or dilution.</p>
-            </div>
-          </div>
-
-          <details class="stock-panel">
-            <summary>
-              <span class="summary-icon" aria-hidden="true">+</span>
-              <span><strong>Stock Solution Concentrations</strong><small>Optional · add prepared stock strengths to receive dosing volumes</small></span>
-              <span class="chevron" aria-hidden="true"></span>
-            </summary>
-            <div class="stock-content">
-              <p class="stock-instruction">Enter grams of fertilizer per liter of stock solution. Leave a field blank to receive dry mass only.</p>
-              <div class="stock-grid">
-                <label>Ca(NO<sub>3</sub>)<sub>2</sub><span class="number-field"><input class="stock-input" type="number" min="0.000001" max="1000000" step="any" placeholder="Not provided" inputmode="decimal"><span>g/L</span></span></label>
-                <label>KNO<sub>3</sub><span class="number-field"><input class="stock-input" type="number" min="0.000001" max="1000000" step="any" placeholder="Not provided" inputmode="decimal"><span>g/L</span></span></label>
-                <label>K<sub>2</sub>SO<sub>4</sub><span class="number-field"><input class="stock-input" type="number" min="0.000001" max="1000000" step="any" placeholder="Not provided" inputmode="decimal"><span>g/L</span></span></label>
-                <label>Mg(NO<sub>3</sub>)<sub>2</sub><span class="number-field"><input class="stock-input" type="number" min="0.000001" max="1000000" step="any" placeholder="Not provided" inputmode="decimal"><span>g/L</span></span></label>
-                <label>MgSO<sub>4</sub><span class="number-field"><input class="stock-input" type="number" min="0.000001" max="1000000" step="any" placeholder="Not provided" inputmode="decimal"><span>g/L</span></span></label>
-                <label>KH<sub>2</sub>PO<sub>4</sub><span class="number-field"><input class="stock-input" type="number" min="0.000001" max="1000000" step="any" placeholder="Not provided" inputmode="decimal"><span>g/L</span></span></label>
-              </div>
-            </div>
-          </details>
-
-          <div id="formError" class="error-banner" role="alert" tabindex="-1" hidden></div>
-
-          <div class="form-actions">
-            <button class="calculate-button" id="calculateButton" type="submit">
-              <span class="button-label">Calculate recommendation</span>
-              <span class="button-arrow" aria-hidden="true">→</span>
-              <span class="spinner" aria-hidden="true"></span>
-            </button>
-            <button class="reset-button" type="reset">Reset inputs</button>
-            <span class="privacy-note"><span aria-hidden="true">●</span> Calculations run securely on the server</span>
-          </div>
+          <p class="card-note">Prefilled values are an example. Replace them with your targets and measured concentrations before using the result.</p>
         </section>
+
+        <section class="card" aria-labelledby="stock-title">
+          <div class="card-heading"><div class="section-title"><span class="step">02</span><h2 id="stock-title">Stock solutions</h2></div><span class="subtle-badge">Optional</span></div>
+          <p class="section-copy">Enter grams of fertilizer per liter of stock to calculate a dosing volume. Leave a field empty for a dry-fertilizer mass only.</p>
+          <div class="table-wrap">
+            <table class="stock-table">
+              <caption class="sr-only">Fertilizer stock concentrations in grams of fertilizer per liter of stock solution.</caption>
+              <thead><tr><th scope="col">Fertilizer</th><th scope="col" id="stock-heading">Stock strength <span>g/L</span></th></tr></thead>
+              <tbody id="stock-inputs"></tbody>
+            </table>
+          </div>
+          <p class="card-note">The model uses pure, anhydrous salts. Hydrated or blended products require different fertilizer coefficients.</p>
+        </section>
+
+        <div class="form-actions">
+          <button id="calculate-button" class="button button-primary" type="submit"><span id="calculate-label">Calculate additions</span><span class="button-arrow" aria-hidden="true">→</span></button>
+          <div class="secondary-actions"><button id="example-button" class="button button-text" type="button">Load example</button><button id="clear-button" class="button button-text" type="button">Clear inputs</button></div>
+        </div>
+        <p id="calculation-status" class="calculation-status" role="status" aria-live="polite"></p>
+        <div id="error-message" class="message error" role="alert" hidden></div>
       </form>
 
-      <section id="results" class="results" aria-labelledby="results-heading" aria-live="polite" hidden>
-        <div class="results-title-row">
-          <div>
-            <span class="section-kicker">Results</span>
-            <h2 id="results-heading">Your nutrient recommendation</h2>
-          </div>
-          <span class="complete-badge"><span>✓</span> Calculation complete</span>
+      <aside class="result-column" aria-label="Calculation results">
+        <section id="empty-state" class="card empty-state">
+          <span class="empty-symbol" aria-hidden="true">+</span>
+          <p class="eyebrow">YOUR FORMULATION</p>
+          <h2>A clearer picture of your solution.</h2>
+          <p>Enter your concentrations and reservoir volume. Your fertilizer masses, stock volumes, and predicted ion levels will appear here.</p>
+          <div class="empty-ion-list" aria-label="Included ions"><span>NO₃⁻</span><span>K⁺</span><span>Ca²⁺</span><span>Mg²⁺</span><span>SO₄²⁻</span><span>H₂PO₄⁻</span></div>
+          <div class="empty-footnote"><span aria-hidden="true">↗</span><p>Additions only. Existing excess nutrients cannot be removed by this calculation.</p></div>
+        </section>
+
+        <div id="results" hidden>
+          <section class="card result-card" aria-labelledby="results-title">
+            <div class="result-heading"><div><p class="eyebrow">YOUR FORMULATION</p><h2 id="results-title" tabindex="-1">Recommended additions</h2></div><button id="export-button" type="button" class="button button-small">Export CSV</button></div>
+            <p id="result-context" class="result-context"></p>
+            <p id="stale-message" class="message notice" hidden>Inputs have changed. Calculate again to update these results.</p>
+            <div class="metrics">
+              <div><span>Total fertilizer</span><strong id="total-mass">—</strong><small>g dry mass</small></div>
+              <div><span>Tracking RMSE</span><strong id="tracking-rmse">—</strong><small>mg/L across six ions</small></div>
+              <div><span>Largest difference</span><strong id="max-error">—</strong><small>mg/L from a target</small></div>
+            </div>
+            <div class="table-wrap">
+              <table class="dosing-table"><caption class="table-caption">Fertilizer additions</caption><thead><tr><th scope="col">Fertilizer</th><th scope="col">Dry mass <span>g</span></th><th scope="col">Stock volume <span>mL</span></th></tr></thead><tbody id="dosing-results"></tbody></table>
+            </div>
+            <p class="card-note">A dash means no stock strength was supplied. Additions are calculated at the entered reservoir volume; added stock water is not included in a dilution calculation.</p>
+          </section>
+
+          <section class="card" aria-labelledby="balance-title">
+            <div class="card-heading"><div class="section-title"><h2 id="balance-title">Predicted ion balance</h2></div><span class="subtle-badge">mg/L</span></div>
+            <div class="table-wrap"><table class="balance-table"><caption class="sr-only">Current, target, added, and predicted concentrations; difference is predicted minus target.</caption><thead><tr><th scope="col">Ion</th><th scope="col">Current</th><th scope="col">Target</th><th scope="col">Added</th><th scope="col">Predicted</th><th scope="col">Difference</th></tr></thead><tbody id="balance-results"></tbody></table></div>
+            <p class="card-note">Difference = predicted concentration − target. Coupled fertilizer ions may prevent an exact match.</p>
+          </section>
+
+          <section id="warnings-panel" class="message notice" aria-labelledby="warnings-title" hidden><h3 id="warnings-title">Formulation notes</h3><ul id="warnings-list"></ul></section>
+          <details class="card assumptions-card"><summary>Calculation assumptions</summary><ul id="assumptions-list"></ul></details>
         </div>
+      </aside>
+    </div>
 
-        <article class="result-card recommendation-card">
-          <div class="result-card-heading">
-            <div class="result-icon flask-icon" aria-hidden="true">◇</div>
-            <div><h3>Recommended Fertilizer Addition</h3><p>Amounts required for your reservoir</p></div>
-          </div>
-          <div class="table-scroll">
-            <table class="data-table results-table">
-              <thead><tr><th scope="col">Fertilizer</th><th scope="col">Required concentration</th><th scope="col">Required mass</th><th scope="col">Stock dose</th></tr></thead>
-              <tbody id="fertilizerResults"></tbody>
-            </table>
-          </div>
-          <p id="zeroAdditionMessage" class="empty-result" hidden>No fertilizer addition is required for the entered concentrations.</p>
-        </article>
-
-        <article class="result-card">
-          <div class="result-card-heading">
-            <div class="result-icon" aria-hidden="true">◎</div>
-            <div><h3>Expected Final Nutrient Concentration</h3><p>Projected concentration after the recommended addition</p></div>
-          </div>
-          <div class="table-scroll">
-            <table class="data-table results-table">
-              <thead><tr><th scope="col">Ion</th><th scope="col">Current</th><th scope="col">Target</th><th scope="col">Predicted final</th><th scope="col">Fit</th></tr></thead>
-              <tbody id="finalResults"></tbody>
-            </table>
-          </div>
-        </article>
-
-        <article class="result-card">
-          <div class="result-card-heading">
-            <div class="result-icon" aria-hidden="true">≋</div>
-            <div><h3>Ion Balance</h3><p>Requested and predicted nutrient increases</p></div>
-          </div>
-          <div class="table-scroll">
-            <table class="data-table results-table">
-              <thead><tr><th scope="col">Ion</th><th scope="col">Requested increase</th><th scope="col">Predicted increase</th><th scope="col">Difference</th></tr></thead>
-              <tbody id="balanceResults"></tbody>
-            </table>
-          </div>
-        </article>
-
-        <div id="warningList" class="warning-list"></div>
-
-        <article class="result-card summary-card">
-          <div class="result-card-heading">
-            <div class="result-icon" aria-hidden="true">i</div>
-            <div><h3>Calculation Summary</h3><p>High-level formulation details</p></div>
-          </div>
-          <dl class="summary-list">
-            <div><dt>Method</dt><dd>Ion-balanced nonnegative fertilizer optimization</dd></div>
-            <div><dt>Reservoir</dt><dd id="summaryReservoir">—</dd></div>
-            <div><dt>Candidate formulation selected</dt><dd id="summaryCombination">—</dd></div>
-          </dl>
-        </article>
-      </section>
-
-      <section class="assumptions" aria-labelledby="assumptions-heading">
-        <span class="section-kicker">Scientific notes</span>
-        <h2 id="assumptions-heading">Assumptions</h2>
-        <div class="assumption-grid">
-          <ul>
-            <li>Concentrations are expressed in mg/L of the listed ionic species.</li>
-            <li>SO<sub>4</sub> input represents sulfate, not elemental sulfur.</li>
-            <li>The optimization only adds nutrients; it does not model dilution or nutrient removal.</li>
-          </ul>
-          <ul>
-            <li>Fertilizer ions are assumed to fully dissociate.</li>
-            <li>Stock concentrations are grams of fertilizer per liter of stock solution.</li>
-            <li>Actual fertilizer purity and hydration state must be verified before physical dosing.</li>
-          </ul>
-        </div>
-        <div class="anhydrous-warning">
-          <strong>Check your chemical form.</strong>
-          Molecular weights currently assume anhydrous fertilizer formulas. If hydrated salts are used to prepare stock solutions, enter or configure the molecular weight corresponding to the actual chemical product.
-        </div>
-      </section>
-    </main>
-
-    <footer>
-      <div><strong>Ionform</strong><span>Decision support for controlled-environment research</span></div>
-      <p>Verify all recommendations against product labels, purity certificates, and your facility’s dosing protocol.</p>
-    </footer>
-  </body>
+    <section class="method-section" id="method" aria-labelledby="method-title">
+      <div><p class="eyebrow">ABOUT THE CALCULATION</p><h2 id="method-title">A practical estimate, with the chemistry in view.</h2></div>
+      <div class="method-copy"><p>The server calculates nonnegative fertilizer additions to bring the solution toward the selected ion targets. One fertilizer can supply several ions, so a close match for every ion may not be possible.</p><p>All concentrations refer to the listed ionic species: nitrate, sulfate, and dihydrogen phosphate are not elemental nitrogen, sulfur, or phosphorus. This tool does not model nutrient removal, pH, precipitation, or changes in solution volume.</p></div>
+    </section>
+  </main>
+  <footer class="shell site-footer"><span>Nutrient Solution Calculator</span><span>Six ions. One reservoir. An informed next step.</span></footer>
+</body>
 </html>
